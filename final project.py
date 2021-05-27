@@ -3,14 +3,17 @@
 # Thanks to them for making this data set public.
 # You can find data beyond cumulative cases there!
 
-from datetime import date, timedelta, datetime
 import calendar
-from typing import List
-
-import seaborn as sns
+from datetime import date, timedelta
 import matplotlib.pyplot as plt
+import pandas as pd
 
-COUNTRY_PATH = 'countries/Egypt.txt'
+print("")
+print("This program analyze the Covid-19 data for any specific country")
+print("")
+country_req = input("Enter the country name you want to analyze : ")
+
+COUNTRY_PATH = "countries/" + country_req + ".txt"
 
 
 def main():
@@ -24,16 +27,15 @@ def main():
             days_count += 1
         else:
             first_case += 1
-
-    print("It has been", days_count, "days since the first reported case here")
+    print("It has been", days_count, "days since the first reported case")
     print("First case was reported on", get_date(first_case))
 
     # creating a list with the new daily cases only
-    daily_list = []
-
+    daily_list = [accum_list[0]]
     for i in range(len(accum_list) - 1):
         daily_cases = accum_list[i + 1] - accum_list[i]
         daily_list.append(daily_cases)
+
     # find out the maximum number of daily cases with the number of days since beginning
     max_daily = 0
     max_counter = 0
@@ -41,32 +43,37 @@ def main():
         if daily_list[i] > max_daily:
             max_daily = daily_list[i]
             max_counter = i
+
     print("The maximum number of daily cases was", max_daily)
     print("and it was recorded on", get_date(max_counter))
 
     # creating a dictionary where keys are dates and new cases are values
-    covid_dict = make_dict(daily_list, 'y')
-    last_week_dict = {}
-    last_month_dict = {}
-    last_year_dict = {}
+    covid_dict = make_dict(daily_list)
 
     # creating a shorter dictionary for the last week , the last month and last year
+    last_week_temp = {}
+    last_month_temp = {}
+    last_year_temp = {}
     for index, key in enumerate(covid_dict):
         if index >= (len(covid_dict) - 30):
-            last_month_dict[key] = covid_dict[key]
+            last_month_temp[key] = covid_dict[key]
         if index >= (len(covid_dict) - 7):
-            last_week_dict[key] = covid_dict[key]
+            last_week_temp[key] = covid_dict[key]
         if index >= (len(covid_dict) - 365):
-            last_year_dict[key] = covid_dict[key]
+            last_year_temp[key] = covid_dict[key]
 
-    for key in last_year_dict:
-        str_key_list = list(last_year_dict.keys())
-        stripped = str(str_key_list).split("-")
+    # modifying the dictionaries to make the date displayed correctly whenever required
+    last_week_dict = new_dict(last_week_temp, 'w')
+    last_month_dict = new_dict(last_month_temp, 'w')
+    last_year_dict = new_dict(last_year_temp, 'y')
 
-    #print(len(str_key_list))
-    #print(str_key_list)
+    # converting last year daily data to monthly data using pandas
+    last_year_pd = pd.Series(last_year_dict, name='Cases')
+    last_year_pd.index.name = 'Date'
+    last_year_pd.index = pd.to_datetime(last_year_pd.index)
+    monthly_df = last_year_pd.resample('MS').sum()
 
-    # asking user to choose between last week or last month graph to show
+    # asking user to choose which graph to show
     print("")
     print("")
     print("Which graph do you like to show :")
@@ -76,13 +83,14 @@ def main():
     graph = int(input("Please enter your choice (1,2,3) : "))
     while True:
         if graph == 1:
-            make_bar_plot(last_week_dict)
+            make_plot(to_pd(last_week_dict), 'bar')
             break
         if graph == 2:
-            make_bar_plot(last_month_dict)
+            make_plot(to_pd(last_month_dict), 'bar')
             break
         if graph == 3:
-            make_bar_plot(last_year_dict)
+            make_plot(monthly_df, 'line')
+            break
         else:
             print("Invalid Input")
             graph = int(input("Please enter 1 , 2 or 3 : "))
@@ -99,11 +107,21 @@ def get_date(days):
     month = calendar.month_abbr[month_number]
     day = int(date_lst[8] + date_lst[9])
     req_date = str(day) + '-' + month + '-' + str(year)
-
     return req_date
 
 
+def new_dict(old_dict, freq):
+    # modifying the given dictionary by formatting the keys into requested format using other function
+    correct_dict = {}
+    for key in old_dict:
+        new_dict_key = date_option(key, freq)
+        correct_dict[new_dict_key] = old_dict[key]
+
+    return correct_dict
+
+
 def date_option(days, freq):
+    # giving more option to show more date format
     start_date = date(2020, 1, 22)
     actual_date = start_date + timedelta(days)
     date_lst = list(str(actual_date).strip())
@@ -116,13 +134,7 @@ def date_option(days, freq):
     elif freq == 'w':
         return str(day) + '-' + month
     elif freq == 'y':
-        return str(day) + '-' + month + '-' + str(year)
-
-
-def shorten_string(long_date):
-    short_list = long_date.split()
-    print(short_list)
-    return short_list[0] + '-' + short_list[1]
+        return actual_date
 
 
 def load_file(txt_file):
@@ -135,31 +147,29 @@ def load_file(txt_file):
     return accum_list
 
 
-def make_dict(orig_list, freq):
-    # this function will convert giving list to a dictionary where it gets the keys from other function
-    new_dict = {}
+def make_dict(orig_list):
+    # this function will convert giving list to a dictionary
+    temp_dict = {}
     for i in range(len(orig_list)):
-        new_key = date_option(i, freq)
-        new_dict[new_key] = orig_list[i]
+        new_key = i
+        temp_dict[new_key] = orig_list[i]
 
-    return new_dict
+    return temp_dict
 
 
-def make_bar_plot(covid_dict):
-    # this function will draw a bar plot from a given dictionary where its values are integers
-    counts = []
-
-    for label in covid_dict:
-        counts.append(covid_dict[label])
-
-    data = {
-        'x': list(shorten_string(covid_dict.keys())),
-        'y': counts
-    }
-    ax = sns.barplot(x='x', y='y', data=data, palette='icefire')
-    ax.set(xlabel='Date', ylabel='New Cases')
+def make_plot(df, plot_type):
+    # make a plot using DataFrame file and the type of the plot
+    df.plot(x='Date', y='Cases', kind=plot_type)
     plt.show()
+
+
+def to_pd(old_dict):
+    # convert dictionary to DataFrame file
+    df = pd.Series(old_dict, name='Cases')
+    df.index.name = 'Date'
+    return df
 
 
 if __name__ == '__main__':
     main()
+
